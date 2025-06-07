@@ -12,13 +12,15 @@ app.use(rateLimiter);
 app.use(express.json());
 
 app.use("/api", transactionsRoutes);
-
+app.get('/test',(req,res)=>{
+    return res.json({message: "server is up and running"})
+})
 const PORT = process.env.PORT || 5001
 
 
 initDb().then(() => {
 
-    app.listen(PORT, () => {
+    app.listen(PORT, '0.0.0.0', () => {
         console.log("server is running on PORT:", PORT);
 
     })
