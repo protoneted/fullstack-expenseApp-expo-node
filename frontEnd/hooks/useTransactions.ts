@@ -1,6 +1,6 @@
 import {useCallback, useState} from "react"
 import {Alert} from "react-native";
-export const API_URL = "http://192.168.1.3:5001/api"
+export const API_URL = "http://192.168.132.24:5001/api"
 export const useTransactions = (userId) => {
     const [transactions, setTransactions] = useState([]);
     const [summary, setSummary] = useState({

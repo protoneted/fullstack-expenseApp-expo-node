@@ -1,8 +1,9 @@
 import {styles} from "@/assets/styles/create.styles";
 import {COLORS} from "@/constants/colors";
-import {API_URL} from "@/hooks/useTransactions";
+import {createTransaction} from "@/hooks/useTransactionsQuery";
 import {useUser} from "@clerk/clerk-expo"
 import {Ionicons} from "@expo/vector-icons";
+import {useMutation, useQueryClient} from "@tanstack/react-query";
 import {router} from "expo-router";
 import {useState} from "react";
 import {ActivityIndicator, Alert, Text, TextInput, TouchableOpacity, View} from "react-native"
@@ -26,12 +27,25 @@ const incomeCategory = [
 
 
 const CreatedTransaction = () => {
-    const {user} = useUser();    
+    const queryClient = useQueryClient();
+    const {user} = useUser();
     const [title, setTitle] = useState("");
     const [amount, setAmount] = useState("");
     const [category, setCategory] = useState("");
     const [isExpense, setIsExpense] = useState(true);
-    const [isLoading, setIsLoading] = useState(false);
+    const transactinoMutation = useMutation({
+        mutationFn: createTransaction,
+        onSuccess: (d, newEntry) => {
+            queryClient.setQueryData(["transactions"], (oldData: [any]) => [{
+                ...newEntry, created_at: new Date().toISOString()
+            }, ...oldData])
+            queryClient.invalidateQueries({queryKey: ["summary"]})
+            console.log("------##------------------d", d);
+            console.log("create mutation is action")
+        }
+    })
+
+
     const catogeryMap = isExpense ? expenseCategory : incomeCategory;
     const handleCreate = async () => {
         if (!title.trim()) {
@@ -43,63 +57,45 @@ const CreatedTransaction = () => {
         if (!category) {
             return Alert.alert("Error", "please select a category.")
         }
-        setIsLoading(true)
         try {
             const formattedAmount = isExpense ? -Math.abs(parseFloat(amount)) : Math.abs(parseFloat(amount));
-            const response = await fetch(`${API_URL}/transaction`, {
-                method: 'POST',
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    user_id: user.id,
-                    title,
-                    amount: formattedAmount,
-                    category,
-                })
-            })
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || "Failed to create transaction")
-            }
 
-            Alert.alert("Success", "Transaction created successfully.");
-            router.back();
+            transactinoMutation.mutate({user_id: user?.id, category, amount: formattedAmount, title}, {
+                onSuccess: () => {
+                    Alert.alert("Success", "Transaction created successfully.");
+                    router.back();
+                }
+            })
 
         } catch (error) {
             Alert.alert("Error", error.message || "Failed to create transaction.");
             console.log("Error creating transaction", error);
-
-
-        } finally {
-            setIsLoading(false)
-
         }
     }
     return (
         <View style={styles.container}>
             <View style={styles.header}>
-                <Ionicons name=""/>
+                <Ionicons name="" />
                 <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
                     <Ionicons name="arrow-back" size={24} color={COLORS.text} />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>New Transaction</Text>
-                <TouchableOpacity style={[styles.saveButtonContainer, isLoading && styles.saveButtonDisabled]}
+                <TouchableOpacity style={[styles.saveButtonContainer, transactinoMutation.isPending && styles.saveButtonDisabled]}
                     onPress={handleCreate}
-                    disabled={isLoading}
+                    disabled={transactinoMutation.isPending}
                 >
-                    <Text style={styles.saveButton}>{isLoading ? "Saving..." : "Save"}</Text>
-                    {!isLoading && <Ionicons name="checkmark" size={18} color={COLORS.primary} />}
+                    <Text style={styles.saveButton}>{transactinoMutation.isPending ? "Saving..." : "Save"}</Text>
+                    {!transactinoMutation.isPending && <Ionicons name="checkmark" size={18} color={COLORS.primary} />}
                 </TouchableOpacity>
             </View>
 
             <View style={styles.card}>
                 <View style={styles.typeSelector}>
-                    <TouchableOpacity style={[styles.typeButton, isExpense && styles.typeButtonActive]} onPress={()=>setIsExpense(true)}>
+                    <TouchableOpacity style={[styles.typeButton, isExpense && styles.typeButtonActive]} onPress={() => setIsExpense(true)}>
                         <Ionicons name="arrow-down-circle" size={22} color={isExpense ? COLORS.white : COLORS.expense} style={styles.typeIcon} />
                         <Text style={[styles.typeButtonText, isExpense && styles.typeButtonTextActive]}>Expenses</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={[styles.typeButton, !isExpense && styles.typeButtonActive]} onPress={()=>setIsExpense(false)}>
+                    <TouchableOpacity style={[styles.typeButton, !isExpense && styles.typeButtonActive]} onPress={() => setIsExpense(false)}>
                         <Ionicons name="arrow-up-circle" size={22} color={!isExpense ? COLORS.white : COLORS.income} style={styles.typeIcon} />
                         <Text style={[styles.typeButtonText, !isExpense && styles.typeButtonTextActive]}>Income</Text>
                     </TouchableOpacity>
@@ -134,7 +130,7 @@ const CreatedTransaction = () => {
                 <Text style={styles.sectionTitle}>
                     Category
                 </Text>
-                                    <Ionicons name="pricetag-outline" size={16} color={COLORS.text} />
+                <Ionicons name="pricetag-outline" size={16} color={COLORS.text} />
 
                 <View style={styles.categoryGrid}>
                     {catogeryMap.map((e) => (
@@ -157,9 +153,9 @@ const CreatedTransaction = () => {
                 </View>
             </View>
 
-            {isLoading && (
+            {transactinoMutation.isPending && (
                 <View style={styles.loadingContainer}>
-                    <ActivityIndicator size={'large'} color={COLORS.primary}/>
+                    <ActivityIndicator size={'large'} color={COLORS.primary} />
                 </View>
             )}
         </View>

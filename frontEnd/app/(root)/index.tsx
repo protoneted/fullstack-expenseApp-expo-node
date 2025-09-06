@@ -3,41 +3,49 @@ import {useUser} from '@clerk/clerk-expo'
 import {router} from 'expo-router'
 import {Alert, FlatList, Image, RefreshControl, Text, TouchableOpacity, View} from 'react-native'
 import {SignOutButton} from '@/components/signOutButton'
-import {useTransactions} from '@/hooks/useTransactions';
-import {useEffect, useState} from 'react';
+import {useState} from 'react';
 import {PageLoader} from '@/components/pageLoader';
 import {styles} from '@/assets/styles/home.styles';
 import {Ionicons} from '@expo/vector-icons';
 import {BalanceCard} from '@/components/balanceCard';
 import {TransactionItem} from '@/components/transactionItem';
 import {EmptyList} from '@/components/emptyList'
+import {deleteTransaction, useSummaryQueryData, useTransactionQueryData} from '@/hooks/useTransactionsQuery'
+import {useMutation, useQueryClient, UseQueryResult} from '@tanstack/react-query'
 
 export default function Page() {
+  const queryClient = useQueryClient();
   const {user} = useUser()
-  const [refreshing, setRefreshing] = useState(false);
+  const summaryData: UseQueryResult = useSummaryQueryData(user?.id);
+  const transactionData: UseQueryResult = useTransactionQueryData(user?.id);
 
-  const {loadData, deleteTransaction, transactions, summary, loading} = useTransactions(user?.id);
+  const deteletTransactionMutation = useMutation({
+    mutationFn: deleteTransaction,
+    onSuccess: (d, v) => {
+      queryClient.invalidateQueries({queryKey: ['transactions']})
+      queryClient.invalidateQueries({queryKey: ['summary']})
+
+      console.log("------##------------------d", d);
+      console.log("------##------------------v", v);
+      console.log("delete mutation is action")
+    }
+  })
+  const [refreshing, setRefreshing] = useState(false);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadData()
+    transactionData.refetch();
+    summaryData.refetch();
     setRefreshing(false);
   };
-
-  useEffect(() => {
-    loadData()
-  }, []);
 
   const handleDelete = (id) => {
     Alert.alert("Delete", "Are you sure ?", [
       {text: 'Cancel', style: 'cancel'},
-      {text: 'Delete', style: 'destructive', onPress: () => deleteTransaction(id)},
+      {text: 'Delete', style: 'destructive', onPress: () => deteletTransactionMutation.mutate({tId: id, userId: user?.id})},
     ])
   }
 
-  if (loading && !refreshing) {
-    return <PageLoader />
-  }
   return (
     <View style={styles.container}>
       <View style={styles.content}>
@@ -59,7 +67,7 @@ export default function Page() {
             <SignOutButton />
           </View>
         </View>
-        <BalanceCard summary={summary} />
+        <BalanceCard summary={summaryData.data} />
         <View style={styles.transactionsHeaderContainer}>
           <Text style={styles.sectionTitle}>
             Recent Transactions
@@ -68,7 +76,7 @@ export default function Page() {
 
       </View>
       <FlatList
-        data={transactions}
+        data={transactionData.data}
         renderItem={({item}) => {
           return (
             <TransactionItem item={item} onDelete={handleDelete} />
@@ -77,7 +85,9 @@ export default function Page() {
         contentContainerStyle={styles.transactionsListContent}
         style={styles.transactionsList}
         ListEmptyComponent={<EmptyList />}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        refreshControl={<RefreshControl refreshing={
+          refreshing ||  deteletTransactionMutation.isPending || transactionData.isLoading || summaryData.isLoading
+        } onRefresh={onRefresh} />}
         showsVerticalScrollIndicator={false}
       />
     </View>
